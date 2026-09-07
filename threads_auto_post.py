@@ -11,6 +11,7 @@
   2. Claude API 로 스레드 스타일 글 생성 (500자 이내, 최근 글과 중복 방지, 시간대 반영)
   3. images/ 폴더에서 랜덤 3장 추출 → GitHub 공개 URL 생성
   4. Threads API 로 캐러셀(3장) + 글 게시
+     → 게시 직후 첫 댓글로 문의 전화(1661-3889) 안내 자동 작성
   5. posted_log.json 에 기록 저장 (다음 회차 중복 방지용)
   6. 토큰 만료 임박 시 자동 갱신
 
@@ -251,6 +252,34 @@ def post_to_threads(text, image_urls):
 
 
 # ─────────────────────────────────────────────
+# 4-4. 첫 댓글 자동 작성 (문의 전화 안내)
+# ─────────────────────────────────────────────
+FIRST_COMMENT = "진안 홍삼빌호텔의 사우나팩키지상품에 관한 문의는 1661-3889 로 연락주세요"
+
+
+def post_first_comment(post_id):
+    """게시 직후 본문 글에 고정 안내 댓글을 단다. 실패해도 본문 게시는 유지."""
+    try:
+        time.sleep(10)  # 게시 반영 대기
+        res = http_json(f"{THREADS_API}/{USER_ID}/threads", {
+            "media_type": "TEXT",
+            "text": FIRST_COMMENT,
+            "reply_to_id": post_id,
+            "access_token": ACCESS_TOKEN,
+        })
+        time.sleep(5)
+        res = http_json(f"{THREADS_API}/{USER_ID}/threads_publish", {
+            "creation_id": res["id"],
+            "access_token": ACCESS_TOKEN,
+        })
+        print(f"💬 첫 댓글 작성 완료! reply id = {res['id']}")
+        return res["id"]
+    except Exception as e:
+        print(f"⚠️ 첫 댓글 작성 실패 (본문은 게시됨): {e}")
+        return None
+
+
+# ─────────────────────────────────────────────
 # 5. 토큰 자동 갱신 (만료 60일 → 20일마다 갱신)
 # ─────────────────────────────────────────────
 def refresh_token_if_needed():
@@ -337,6 +366,8 @@ def main():
     post_id = post_to_threads(text, urls)
     print(f"🚀 게시 완료! post id = {post_id}")
 
+    reply_id = post_first_comment(post_id)
+
     # 로그 저장 (최근 50개 유지 = 약 2주치)
     log["count"] += 1
     log["posts"].append({
@@ -345,6 +376,7 @@ def main():
         "text": text,
         "images": chosen,
         "post_id": post_id,
+        "reply_id": reply_id,
     })
     log["posts"] = log["posts"][-50:]
     with open(LOG_FILE, "w", encoding="utf-8") as f:
