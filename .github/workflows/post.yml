@@ -1,0 +1,50 @@
+name: 진안사우나 스레드 자동 포스팅
+
+on:
+  schedule:
+    # cron 은 UTC 기준 (한국시간 −9시간). 하루 3회.
+    - cron: "0 23 * * *"    # 한국시간 08:00
+    - cron: "30 3 * * *"    # 한국시간 12:30
+    - cron: "0 10 * * *"    # 한국시간 19:00
+  workflow_dispatch:        # Actions 탭에서 수동 실행 (Run workflow) 가능
+
+permissions:
+  contents: write           # posted_log.json / .token_meta.json 커밋용
+
+concurrency:
+  group: threads-post
+  cancel-in-progress: false
+
+jobs:
+  post:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: 저장소 체크아웃
+        uses: actions/checkout@v4
+
+      - name: Python 설치
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: 의존성 설치 (토큰 자동 저장용)
+        run: pip install -r requirements.txt
+
+      - name: 스레드 게시
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          THREADS_ACCESS_TOKEN: ${{ secrets.THREADS_ACCESS_TOKEN }}
+          THREADS_USER_ID: ${{ secrets.THREADS_USER_ID }}
+          GH_PAT: ${{ secrets.GH_PAT }}
+        run: python threads_auto_post.py
+
+      - name: 게시 기록 저장 (커밋)
+        if: always()
+        run: |
+          git config user.name "threads-bot"
+          git config user.email "threads-bot@users.noreply.github.com"
+          git add posted_log.json .token_meta.json 2>/dev/null || true
+          git diff --cached --quiet || git commit -m "log: 게시 기록 갱신 $(date -u +'%Y-%m-%d %H:%M UTC')"
+          git pull --rebase origin ${{ github.ref_name }} || true
+          git push origin HEAD:${{ github.ref_name }} || true
