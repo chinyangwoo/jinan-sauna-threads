@@ -190,13 +190,18 @@ def generate_post(topic, cfg, log):
 # 3. 랜덤 이미지 3장 → 공개 URL
 # ─────────────────────────────────────────────
 def pick_images(log):
-    files = [
-        f for f in os.listdir(IMAGE_DIR)
-        if os.path.splitext(f)[1].lower() in IMAGE_EXTS
-    ]
+    """images/ 폴더와 저장소 루트(최상위) 양쪽에서 사진을 모은다."""
+    files = []  # (상대경로) 예: "images/sauna_01.jpg" 또는 "coldplunge.png"
+    for folder in (IMAGE_DIR, "."):
+        if not os.path.isdir(folder):
+            continue
+        for f in os.listdir(folder):
+            if os.path.splitext(f)[1].lower() in IMAGE_EXTS:
+                files.append(f if folder == "." else f"{folder}/{f}")
     if len(files) < IMAGE_COUNT:
         raise RuntimeError(
-            f"images/ 폴더에 이미지가 {len(files)}장뿐입니다. 최소 {IMAGE_COUNT}장이 필요합니다."
+            f"이미지가 {len(files)}장뿐입니다. 최소 {IMAGE_COUNT}장이 필요합니다. "
+            f"(images/ 폴더 또는 저장소 최상위에 JPG/PNG 업로드)"
         )
     # 직전 게시글과 같은 사진은 가급적 피한다 (사진이 충분할 때만)
     last_used = set(log["posts"][-1]["images"]) if log["posts"] else set()
@@ -205,7 +210,7 @@ def pick_images(log):
         pool = files
     chosen = random.sample(pool, IMAGE_COUNT)
     urls = [
-        f"https://raw.githubusercontent.com/{REPO}/{BRANCH}/{IMAGE_DIR}/{urllib.parse.quote(f)}"
+        f"https://raw.githubusercontent.com/{REPO}/{BRANCH}/{urllib.parse.quote(f)}"
         for f in chosen
     ]
     return chosen, urls
