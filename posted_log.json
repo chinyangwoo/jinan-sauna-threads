@@ -1,5 +1,5 @@
 {
-  "count": 19,
+  "count": 20,
   "posts": [
     {
       "at": "2026-09-07 15:19",
@@ -227,6 +227,18 @@
       ],
       "post_id": "18105412006954069",
       "reply_id": "17907482685473749"
+    },
+    {
+      "at": "2026-09-13 17:29",
+      "topic": "새벽 6시 반 마이산 3km 러닝 → 사우나 2차 → 조식, 이 순서로 하루 시작해 본 적 있음?",
+      "text": "",
+      "images": [
+        "outdoor_barrel_sauna_34.png",
+        "13_burnout_recovery.png",
+        "outdoor_barrel_sauna_35.png"
+      ],
+      "post_id": "18115500761069243",
+      "reply_id": "18430663918145285"
     }
   ]
 }
