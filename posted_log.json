@@ -1,5 +1,5 @@
 {
-  "count": 46,
+  "count": 47,
   "posts": [
     {
       "at": "2026-09-07 15:19",
@@ -551,6 +551,18 @@
       ],
       "post_id": "17900476008598740",
       "reply_id": "18107741426236770"
+    },
+    {
+      "at": "2026-09-22 23:20",
+      "topic": "커플 배럴 사우나 — 둘이 같이 땀 빼고 냉수욕하면서 생기는 대화",
+      "text": "썸",
+      "images": [
+        "outdoor_barrel_sauna_44.png",
+        "outdoor_barrel_sauna_43.png",
+        "outdoor_barrel_sauna_42.png"
+      ],
+      "post_id": "18143907598547143",
+      "reply_id": "17985486881880801"
     }
   ]
 }
