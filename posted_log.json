@@ -1,5 +1,5 @@
 {
-  "count": 49,
+  "count": 50,
   "posts": [
     {
       "at": "2026-09-07 15:19",
@@ -587,6 +587,18 @@
       ],
       "post_id": "18102987140192448",
       "reply_id": "18055891772635762"
+    },
+    {
+      "at": "2026-09-23 23:39",
+      "topic": "가을 단풍 시즌, 새벽 러닝하면서 보는 마이산 뷰가 미쳤다는 소문의 진실",
+      "text": "",
+      "images": [
+        "outdoor_barrel_sauna_19.png",
+        "outdoor_barrel_sauna_15.png",
+        "outdoor_barrel_sauna_02.png"
+      ],
+      "post_id": "18094458506636731",
+      "reply_id": "17991335522848923"
     }
   ]
 }
