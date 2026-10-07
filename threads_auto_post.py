@@ -9,6 +9,7 @@
 동작 순서 (홍삼빌호텔 자동 포스팅 앱과 동일 로직):
   1. topics.json 에서 이번 회차 주제를 선택 (순환 방식)
   2. Claude API 로 스레드 스타일 글 생성 (500자 이내, 최근 글과 중복 방지, 시간대 반영)
+     → 글이 비어 있으면 최대 3회까지 다시 생성, 그래도 비면 게시하지 않고 건너뜀
   3. images/ 폴더에서 랜덤 3장 추출 → GitHub 공개 URL 생성
   4. Threads API 로 캐러셀(3장) + 글 게시
      → 게시 직후 첫 댓글로 문의 전화(1661-3889) 안내 자동 작성
@@ -41,6 +42,9 @@ IMAGE_DIR = "images"
 LOG_FILE = "posted_log.json"
 TOKEN_FILE = ".token_meta.json"          # 토큰 갱신 날짜 기록
 MAX_TEXT_LEN = 480                        # Threads 500자 제한, 여유분 확보
+MIN_TEXT_LEN = 50                         # 이보다 짧으면 빈 글로 보고 다시 생성
+GENERATE_ATTEMPTS = 3                     # 글 생성 최대 시도 횟수
+MAX_SKIP_STREAK = 3                       # 연속으로 이만큼 건너뛰면 오류(빨간 ❌)로 알림
 IMAGE_COUNT = 3                           # 랜덤 추출 이미지 수
 IMAGE_EXTS = {".jpg", ".jpeg", ".png"}
 POSTS_PER_DAY = 3                         # 하루 게시 횟수
@@ -162,9 +166,30 @@ def generate_post(topic, cfg, log):
 
 위 주제로 스레드 게시글 본문만 출력해 주세요."""
 
+    # 글이 비어서 돌아오는 경우가 가끔 있어, 비어 있으면 다시 생성한다.
+    # 끝까지 비어 있으면 빈 문자열을 돌려주고, main() 이 게시를 건너뛴다.
+    for attempt in range(1, GENERATE_ATTEMPTS + 1):
+        # 재시도 때는 답변 길이 한도를 넉넉히 준다 (한도 부족으로 글이 비는 경우 대비)
+        max_tokens = 800 if attempt == 1 else 1600
+        text, reason = call_claude(system, user, max_tokens)
+        if len(text) >= MIN_TEXT_LEN:
+            if len(text) > 495:
+                text = text[:495]
+            return text
+        print(
+            f"⚠️ 생성된 글이 비어 있음 ({len(text)}자, {attempt}/{GENERATE_ATTEMPTS}회차) "
+            f"— 원인 단서: {reason}"
+        )
+        if attempt < GENERATE_ATTEMPTS:
+            time.sleep(5)
+    return ""
+
+
+def call_claude(system, user, max_tokens):
+    """Claude API 를 한 번 호출해 (글, 원인 단서) 를 돌려준다."""
     body = json.dumps({
         "model": "claude-sonnet-5",
-        "max_tokens": 800,
+        "max_tokens": max_tokens,
         "system": system,
         "messages": [{"role": "user", "content": user}],
     }).encode()
@@ -181,10 +206,15 @@ def generate_post(topic, cfg, log):
     with urllib.request.urlopen(req, timeout=120) as res:
         data = json.loads(res.read().decode())
 
-    text = "".join(b["text"] for b in data["content"] if b["type"] == "text").strip()
-    if len(text) > 495:
-        text = text[:495]
-    return text
+    blocks = data.get("content") or []
+    text = "".join(b.get("text", "") for b in blocks if b.get("type") == "text").strip()
+    # 글이 비었을 때 왜 비었는지 로그에서 알 수 있도록 응답 정보를 남긴다
+    reason = (
+        f"stop_reason={data.get('stop_reason')}, "
+        f"블록={[b.get('type') for b in blocks]}, "
+        f"출력토큰={(data.get('usage') or {}).get('output_tokens')}"
+    )
+    return text, reason
 
 
 # ─────────────────────────────────────────────
@@ -358,6 +388,23 @@ def main():
     print(f"🕒 시간대: {time_slot()}")
 
     text = generate_post(topic, cfg, log)
+
+    # 글이 끝까지 비어 있으면 사진만 올라가지 않도록 이번 회차 게시를 건너뛴다
+    if not text:
+        log["count"] += 1          # 다음 회차는 다음 주제로
+        log["skip_streak"] = log.get("skip_streak", 0) + 1
+        with open(LOG_FILE, "w", encoding="utf-8") as f:
+            json.dump(log, f, ensure_ascii=False, indent=2)
+        msg = (
+            f"글 생성이 {GENERATE_ATTEMPTS}회 모두 비어 있어 이번 회차 게시를 건너뜁니다 "
+            f"(연속 {log['skip_streak']}회째)."
+        )
+        if log["skip_streak"] >= MAX_SKIP_STREAK:
+            raise RuntimeError(msg + " 연속으로 반복되고 있으니 점검이 필요합니다.")
+        print(f"::warning::{msg}")
+        print(f"⏭️ {msg}")
+        return
+
     print(f"✍️ 생성된 글 ({len(text)}자):\n{text}\n")
 
     chosen, urls = pick_images(log)
@@ -370,6 +417,7 @@ def main():
 
     # 로그 저장 (최근 50개 유지 = 약 2주치)
     log["count"] += 1
+    log["skip_streak"] = 0
     log["posts"].append({
         "at": datetime.now(KST).strftime("%Y-%m-%d %H:%M"),
         "topic": topic,
