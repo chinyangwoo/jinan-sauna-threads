@@ -6,6 +6,9 @@ on:
     - cron: "57 23 * * *"   # KST 08:57
     - cron: "57 11 * * *"   # KST 20:57
   workflow_dispatch: {}
+  push:
+    branches: [main]
+    paths: [metrics_collect.py, .github/workflows/metrics.yml]
 
 concurrency:
   group: threads-post
