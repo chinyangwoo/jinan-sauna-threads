@@ -3,8 +3,7 @@ name: 홍보 대시보드 수집
 
 on:
   schedule:
-    - cron: "57 23 * * *"   # KST 08:57
-    - cron: "57 11 * * *"   # KST 20:57
+    - cron: "9 * * * *"     # 매시간 9분
   workflow_dispatch: {}
   push:
     branches: [main]
