@@ -34,6 +34,8 @@ import urllib.parse
 import urllib.request
 from datetime import datetime, timezone, timedelta
 
+import sns_calendar  # SNS 창고 공통 모듈 — 창고에 못 닿으면 예전처럼 동작
+
 # ─────────────────────────────────────────────
 # 설정
 # ─────────────────────────────────────────────
@@ -106,7 +108,7 @@ def pick_topic(log):
 # ─────────────────────────────────────────────
 # 2. Claude 로 글 생성 (MZ 말투 + 댓글 유도)
 # ─────────────────────────────────────────────
-def generate_post(topic, cfg, log):
+def generate_post(topic, cfg, log, ctx=None):
     recent = [p["text"] for p in log["posts"][-RECENT_COMPARE:]]
     recent_block = "\n---\n".join(recent) if recent else "(없음)"
     slot = time_slot()
@@ -161,15 +163,22 @@ def generate_post(topic, cfg, log):
 - 유행어 4개 이상 남발 (없어 보임)
 - 글 외의 다른 설명, 따옴표, 머리말 출력"""
 
-    user = f"""오늘의 주제: {topic}
+    if ctx:
+        system += "\n\n" + sns_calendar.prompt_block(ctx, position_hint="본문 끝, 댓글 유도 문장 바로 앞")
+
+    base_user = f"""오늘의 주제: {topic}
 
 최근 게시글 (이것과 겹치지 않게):
 {recent_block}
 
 위 주제로 스레드 게시글 본문만 출력해 주세요."""
+    user = base_user
 
     # 글이 비어서 돌아오는 경우가 가끔 있어, 비어 있으면 다시 생성한다.
     # 끝까지 비어 있으면 빈 문자열을 돌려주고, main() 이 게시를 건너뛴다.
+    # 교차 유도·옛 사우나 정보·없는 가격 검사에 걸리면 지적사항을 붙여 다시 쓰게 하고,
+    # 마지막 시도까지 걸리면 그 글을 그대로 쓴다 (발행은 멈추지 않는다).
+    best = ""
     for attempt in range(1, GENERATE_ATTEMPTS + 1):
         # 재시도 때는 답변 길이 한도를 넉넉히 준다 (한도 부족으로 글이 비는 경우 대비)
         max_tokens = 800 if attempt == 1 else 1600
@@ -177,14 +186,24 @@ def generate_post(topic, cfg, log):
         if len(text) >= MIN_TEXT_LEN:
             if len(text) > 495:
                 text = text[:495]
-            return text
+            problems = sns_calendar.check_cross(text, ctx)
+            if not problems:
+                return text
+            print(f"⚠️ 검사 실패 ({attempt}/{GENERATE_ATTEMPTS}회차): {problems}")
+            best = text
+            user = base_user + "\n\n[재작성 요청] 다음 문제를 고쳐서 본문만 다시 출력: " + "; ".join(problems)
+            if attempt < GENERATE_ATTEMPTS:
+                time.sleep(3)
+            continue
         print(
             f"⚠️ 생성된 글이 비어 있음 ({len(text)}자, {attempt}/{GENERATE_ATTEMPTS}회차) "
             f"— 원인 단서: {reason}"
         )
         if attempt < GENERATE_ATTEMPTS:
             time.sleep(5)
-    return ""
+    if best:
+        print("규칙 완전 통과 실패 → 마지막 글 사용")
+    return best
 
 
 def call_claude(system, user, max_tokens):
@@ -389,7 +408,9 @@ def main():
     print(f"📌 이번 회차 주제: {topic}")
     print(f"🕒 시간대: {time_slot()}")
 
-    text = generate_post(topic, cfg, log)
+    slot = sns_calendar.resolve_slot()
+    ctx = sns_calendar.load_context("threads_sauna", slot)
+    text = generate_post(topic, cfg, log, ctx)
 
     # 글이 끝까지 비어 있으면 사진만 올라가지 않도록 이번 회차 게시를 건너뛴다
     if not text:
@@ -427,10 +448,15 @@ def main():
         "images": chosen,
         "post_id": post_id,
         "reply_id": reply_id,
+        "slot": slot,
+        "cross": ctx["cross"]["target"] if (ctx and ctx.get("cross")) else None,
     })
     log["posts"] = log["posts"][-50:]
     with open(LOG_FILE, "w", encoding="utf-8") as f:
         json.dump(log, f, ensure_ascii=False, indent=2)
+
+    # 교차 유도 기록 (창고) — 실패해도 발행은 유지
+    sns_calendar.log_cross("threads_sauna", post_id, None, slot, ctx, text)
 
     # 토큰 갱신 체크
     new_token = refresh_token_if_needed()

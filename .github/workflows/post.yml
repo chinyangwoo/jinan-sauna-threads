@@ -6,7 +6,13 @@ on:
     - cron: "0 23 * * *"    # 한국시간 08:00
     - cron: "30 3 * * *"    # 한국시간 12:30
     - cron: "0 10 * * *"    # 한국시간 19:00
-  workflow_dispatch:        # Actions 탭에서 수동 실행 (Run workflow) 가능
+  workflow_dispatch:        # 수동 실행 또는 SNS 창고(pg_cron)의 정시 신호
+    inputs:
+      slot:
+        description: "회차 1~3 (0 = 한국시간으로 자동 판단)"
+        required: false
+        default: "0"
+        type: string
 
 permissions:
   contents: write           # posted_log.json / .token_meta.json 커밋용
@@ -37,6 +43,8 @@ jobs:
           THREADS_ACCESS_TOKEN: ${{ secrets.THREADS_ACCESS_TOKEN }}
           THREADS_USER_ID: ${{ secrets.THREADS_USER_ID }}
           GH_PAT: ${{ secrets.GH_PAT }}
+          SLOT: ${{ inputs.slot }}
+          SNS_WRITE_SECRET: ${{ secrets.SNS_WRITE_SECRET }}
         run: python threads_auto_post.py
 
       - name: 게시 기록 저장 (커밋)
