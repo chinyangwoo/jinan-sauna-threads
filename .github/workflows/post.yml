@@ -1,11 +1,8 @@
 name: 진안사우나 스레드 자동 포스팅
 
 on:
-  schedule:
-    # cron 은 UTC 기준 (한국시간 −9시간). 하루 3회.
-    - cron: "0 23 * * *"    # 한국시간 08:00
-    - cron: "30 3 * * *"    # 한국시간 12:30
-    - cron: "0 10 * * *"    # 한국시간 19:00
+  # 정해진 시각 발행은 SNS 창고(Supabase pg_cron)가 workflow_dispatch 로 신호를 보낸다 (2026-11-01 전환).
+  # 되돌리려면 이 자리에 예전 schedule: 블록을 되살리면 된다.
   workflow_dispatch:        # 수동 실행 또는 SNS 창고(pg_cron)의 정시 신호
     inputs:
       slot:
